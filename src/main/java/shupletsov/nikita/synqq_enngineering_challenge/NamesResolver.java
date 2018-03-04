@@ -1,5 +1,7 @@
 package shupletsov.nikita.synqq_enngineering_challenge;
 
+import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 
@@ -13,58 +15,52 @@ class NamesResolver {
 
     private List<List<String>> context;
 
-    private List<List<String>> sentenceNames;
-
-    private List<String> sentenceSingleWordNames;
-
-    NamesResolver(List<String> context, String sentence) {
+    NamesResolver(List<String> context) {
         processContext(context);
-        processSentence(sentence);
     }
 
-    List<Pair<String, String>> resolveNames() {
+    List<Pair<String, String>> correctNames(String sentence) {
+        List<List<String>> sentenceNames = processSentence(sentence);
         List<CompareResult> results = new ArrayList<>();
-        JaroWinklerDistance distance = new JaroWinklerDistance();
         for (List<String> contextPart : context) {
             for (List<String> sentenceName : sentenceNames) {
                 if (contextPart.size() == 1) {
                     if (sentenceName.size() == 1) {
-                        results.add(new CompareResult(contextPart, sentenceName, Collections.singletonList(distance.apply(contextPart.get(0), sentenceName.get(0)))));
+                        results.add(new CompareResult(contextPart, sentenceName));
                     }
                     continue;
                 }
-                // TODO check second word result
                 if (sentenceName.size() == 1) {
-                    results.add(new CompareResult(contextPart, Arrays.asList(sentenceName.get(0), null), Arrays.asList(distance.apply(contextPart.get(0), sentenceName.get(0)), 0.d)));
-                    results.add(new CompareResult(contextPart, Arrays.asList(null, sentenceName.get(0)), Arrays.asList(0.d, distance.apply(contextPart.get(1), sentenceName.get(0)))));
+                    results.add(new CompareResult(contextPart, Arrays.asList(sentenceName.get(0), null)));
+                    results.add(new CompareResult(contextPart, Arrays.asList(null, sentenceName.get(0))));
+                } else {
+                    results.add(new CompareResult(contextPart, sentenceName));
                 }
             }
         }
-        Map<String, Pair<String, Double>> a = new HashMap<>();
-        for (String singleWordName : sentenceSingleWordNames) {
+        Map<List<String>, CompareResult> a = new HashMap<>();
+        for (List<String> sentenceName : sentenceNames) {
             for (CompareResult compareResult : results) {
-                if (!compareResult.sentenceName.contains(singleWordName)) {
+                if (!compareResult.sentenceName.containsAll(sentenceName)) {
                     continue;
                 }
-                Pair<String, Double> w;
-                if (singleWordName.equals(compareResult.sentenceName.get(0))) {
-                    w = Pair.of(compareResult.contextName.get(0), compareResult.result.get(0));
-                } else {
-                    w = Pair.of(compareResult.contextName.get(1), compareResult.result.get(1));
+                CompareResult q = a.get(sentenceName);
+                if (q == null) {
+                    a.put(sentenceName, compareResult);
+                    continue;
                 }
-                Pair<String, Double> q = a.get(singleWordName);
-                if (q == null || q.getRight() < w.getRight()) {
-                    a.put(singleWordName, w);
+//                    System.out.println("compare: " + q + " with " + compareResult + " ====> 2");
+                if (ObjectUtils.compare(q.getFirstResult(), compareResult.getFirstResult()) < 1 && ObjectUtils.compare(q.getSecondResult(), compareResult.getSecondResult()) < 1) {
+                    a.put(sentenceName, compareResult);
                 }
             }
         }
         List<Pair<String, String>> e = new ArrayList<>();
-        for (String singleWordName : sentenceSingleWordNames) {
-            Pair<String, Double> q = a.get(singleWordName);
-            if (q.getRight() < 1.) {
-                e.add(Pair.of(singleWordName, q.getLeft()));
-            }
+        for (List<String> sentenceName : sentenceNames) {
+            CompareResult q = a.get(sentenceName);
+            e.add(Pair.of(StringUtils.join(sentenceName, " "), StringUtils.join(q.contextName, " ")));
         }
+        // TODO lots of garbage. need to clean up
         return e;
     }
 
@@ -75,31 +71,32 @@ class NamesResolver {
         }
     }
 
-    private void processSentence(String sentence) {
-        sentenceNames = new ArrayList<>();
-        sentenceSingleWordNames = new ArrayList<>();
+    private List<List<String>> processSentence(String sentence) {
+        List<List<String>> sentenceNames = new ArrayList<>();
         List<String> buffer = new ArrayList<>();
         for (String part : sentence.replaceAll("[.,]", "").split(" ")) {
             if (!Character.isLowerCase(part.charAt(0)) && !part.equals(I)) {
                 buffer.add(part);
-                sentenceSingleWordNames.add(part);
                 continue;
             }
-            makeNames(buffer);
+            sentenceNames.addAll(makeNames(buffer));
             buffer = new ArrayList<>();
         }
-        makeNames(buffer);
+        sentenceNames.addAll(makeNames(buffer));
+        return sentenceNames;
     }
 
-    private void makeNames(List<String> buffer) {
+    private List<List<String>> makeNames(List<String> buffer) {
+        List<List<String>> result = new ArrayList<>();
         for (int i = 0; i < buffer.size(); i++) {
             for (int j = 0; j < 2; j++) {
                 if (i + j + 1 > buffer.size()) {
                     continue;
                 }
-                sentenceNames.add(buffer.subList(i, i + j + 1));
+                result.add(buffer.subList(i, i + j + 1));
             }
         }
+        return result;
     }
 
     private static class CompareResult {
@@ -109,17 +106,33 @@ class NamesResolver {
 
         List<Double> result;
 
-        CompareResult(List<String> contextName, List<String> sentenceName, List<Double> result) {
+        CompareResult(List<String> contextName, List<String> sentenceName) {
             this.contextName = contextName;
             this.sentenceName = sentenceName;
-            this.result = result;
+            JaroWinklerDistance distance = new JaroWinklerDistance();
+            result = new ArrayList<>();
+            for (int i = 0; i < contextName.size(); i++) {
+                if (sentenceName.get(i) == null) {
+                    result.add(i, null);
+                } else {
+                    result.add(i, distance.apply(contextName.get(i), sentenceName.get(i)));
+                }
+            }
+        }
+
+        Double getFirstResult() {
+            return result.get(0);
+        }
+
+        Double getSecondResult() {
+            return result.size() == 1 ? null : result.get(1);
         }
 
         @Override
         public String toString() {
-            return "\nCompareResult{" +
+            return "CompareResult{" +
                     "contextName=" + contextName +
-                    ", sentenceName=" + sentenceName +
+//                    ", sentenceName=" + sentenceName +
                     ", result=" + result +
                     "}";
         }

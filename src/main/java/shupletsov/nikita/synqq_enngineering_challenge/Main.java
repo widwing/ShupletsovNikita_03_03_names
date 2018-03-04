@@ -22,12 +22,12 @@ public class Main {
         System.out.println("context: " + context);
         String sentence = "tomorrow I have a meeting with Tim Hanks Tom Crus and Eastwud";
         System.out.println("sentence: " + sentence);
-        System.out.println(new NamesResolver(context, sentence).resolveNames()); // looks ok
+        System.out.println(new NamesResolver(context).correctNames(sentence));
         sentence = "Michael likes movies with Jon Way and Client East";
         System.out.println("sentence: " + sentence);
-        System.out.println(new NamesResolver(context, sentence).resolveNames()); // TODO Michael - > Fitcher
+        System.out.println(new NamesResolver(context).correctNames(sentence));
         sentence = "Jonn invited me Jon Ham and Jon Wane, over for a lunch";
         System.out.println("sentence: " + sentence);
-        System.out.println(new NamesResolver(context, sentence).resolveNames()); // TODO Jonn -> Jon(has to understand context)
+        System.out.println(new NamesResolver(context).correctNames(sentence));
     }
 }
