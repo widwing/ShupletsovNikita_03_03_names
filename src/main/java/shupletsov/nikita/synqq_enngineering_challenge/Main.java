@@ -20,14 +20,15 @@ public class Main {
             "Fitcher"
         );
         System.out.println("context: " + context);
+        NamesCorrector namesCorrector = new NamesCorrector(context);
         String sentence = "tomorrow I have a meeting with Tim Hanks Tom Crus and Eastwud";
         System.out.println("sentence: " + sentence);
-        System.out.println(new NamesResolver(context).correctNames(sentence));
+        System.out.println("result: " + namesCorrector.correctNames(sentence));
         sentence = "Michael likes movies with Jon Way and Client East";
         System.out.println("sentence: " + sentence);
-        System.out.println(new NamesResolver(context).correctNames(sentence));
+        System.out.println("result: " + namesCorrector.correctNames(sentence));
         sentence = "Jonn invited me Jon Ham and Jon Wane, over for a lunch";
         System.out.println("sentence: " + sentence);
-        System.out.println(new NamesResolver(context).correctNames(sentence));
+        System.out.println("result: " + namesCorrector.correctNames(sentence));
     }
 }

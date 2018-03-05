@@ -1,6 +1,5 @@
 package shupletsov.nikita.synqq_enngineering_challenge;
 
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
@@ -9,13 +8,13 @@ import java.util.*;
 
 // TODO comments
 // TODO replace q, w, etc to adequate names
-class NamesResolver {
+class NamesCorrector {
 
     private static final String I = "I";
 
     private List<List<String>> context;
 
-    NamesResolver(List<String> context) {
+    NamesCorrector(List<String> context) {
         processContext(context);
     }
 
@@ -49,18 +48,54 @@ class NamesResolver {
                     a.put(sentenceName, compareResult);
                     continue;
                 }
-//                    System.out.println("compare: " + q + " with " + compareResult + " ====> 2");
-                if (ObjectUtils.compare(q.getFirstResult(), compareResult.getFirstResult()) < 1 && ObjectUtils.compare(q.getSecondResult(), compareResult.getSecondResult()) < 1) {
+                if (q.getFirstResult() + q.getSecondResult() < compareResult.getFirstResult() + compareResult.getSecondResult()) {
                     a.put(sentenceName, compareResult);
                 }
             }
         }
-        List<Pair<String, String>> e = new ArrayList<>();
+
+        // TODO check that twice!!! it might be wrong logic
+        Map<List<String>, CompareResult> b = new HashMap<>();
         for (List<String> sentenceName : sentenceNames) {
             CompareResult q = a.get(sentenceName);
-            e.add(Pair.of(StringUtils.join(sentenceName, " "), StringUtils.join(q.contextName, " ")));
+            if (sentenceName.size() == 2) {
+                b.put(sentenceName, q);
+                continue;
+            }
+            boolean contains = false;
+            for (List<String> sentenceName2 : sentenceNames) {
+                if (sentenceName2.size() != 2) {
+                    continue;
+                }
+                if (!sentenceName2.containsAll(sentenceName)) {
+                    continue;
+                }
+                CompareResult q2 = a.get(sentenceName2);
+                if (!q.contextName.equals(q2.contextName)) {
+                    continue;
+                }
+                b.put(sentenceName2, q);
+                contains = true;
+                break;
+            }
+            if (!contains) {
+                b.put(sentenceName, q);
+            }
         }
-        // TODO lots of garbage. need to clean up
+
+        List<Pair<String, String>> e = new ArrayList<>();
+        for (List<String> sentenceName : sentenceNames) {
+            CompareResult q = b.get(sentenceName);
+            if (q == null) {
+                continue;
+            }
+            if (sentenceName.size() == 1) {
+                e.add(Pair.of(sentenceName.get(0), q.contextName.get(q.contextName.size() == 1 || q.result.get(0) > 0. ? 0 : 1)));
+            } else {
+                e.add(Pair.of(StringUtils.join(sentenceName, " "), StringUtils.join(q.contextName, " ")));
+            }
+        }
+
         return e;
     }
 
@@ -113,7 +148,7 @@ class NamesResolver {
             result = new ArrayList<>();
             for (int i = 0; i < contextName.size(); i++) {
                 if (sentenceName.get(i) == null) {
-                    result.add(i, null);
+                    result.add(i, 0.);
                 } else {
                     result.add(i, distance.apply(contextName.get(i), sentenceName.get(i)));
                 }
@@ -125,14 +160,14 @@ class NamesResolver {
         }
 
         Double getSecondResult() {
-            return result.size() == 1 ? null : result.get(1);
+            return result.size() == 1 ? 0. : result.get(1);
         }
 
         @Override
         public String toString() {
             return "CompareResult{" +
                     "contextName=" + contextName +
-//                    ", sentenceName=" + sentenceName +
+                    ", sentenceName=" + sentenceName +
                     ", result=" + result +
                     "}";
         }
