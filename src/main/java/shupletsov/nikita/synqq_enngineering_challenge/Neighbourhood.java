@@ -6,9 +6,10 @@ import org.apache.commons.text.similarity.JaroWinklerDistance;
 
 import java.util.*;
 
+// TODO comments
 class Neighbourhood {
 
-    private List<List<String>> sentenceNames;
+    private List<SentenceName> sentenceNames;
 
     Neighbourhood(List<String> words) {
         sentenceNames = new ArrayList<>();
@@ -17,136 +18,192 @@ class Neighbourhood {
                 if (i + j + 1 > words.size()) {
                     break;
                 }
-                sentenceNames.add(words.subList(i, i + j + 1));
+                sentenceNames.add(new SentenceName(words.subList(i, i + j + 1), i));
             }
         }
     }
 
     List<Pair<String, String>> correctNames(List<List<String>> context) {
         List<CompareResult> compareResults = compareWithContext(context);
-        Map<List<String>, CompareResult> matches = matchResults(compareResults);
-        Map<List<String>, CompareResult> correctedMatches = correctByNeighbors(matches);
-        return makeCorrectionPairs(correctedMatches);
+        Map<SentenceName, CompareResult> filtered = filter(compareResults);
+        return makeCorrectionPairs(filtered);
     }
 
     private List<CompareResult> compareWithContext(List<List<String>> context) {
         List<CompareResult> results = new ArrayList<>();
         for (List<String> contextPart : context) {
-            for (List<String> sentenceName : sentenceNames) {
+            for (SentenceName sentenceName : sentenceNames) {
                 if (contextPart.size() == 1) {
                     if (sentenceName.size() == 1) {
-                        results.add(new CompareResult(sentenceName, contextPart));
+                        results.add(new CompareResult(sentenceName, contextPart, computeDistance(sentenceName.words, contextPart)));
                     }
                     continue;
                 }
                 if (sentenceName.size() == 1) {
-                    results.add(new CompareResult(Arrays.asList(sentenceName.get(0), null), contextPart));
-                    results.add(new CompareResult(Arrays.asList(null, sentenceName.get(0)), contextPart));
+                    results.add(new CompareResult(sentenceName, contextPart, computeDistance(Arrays.asList(sentenceName.get(0), null), contextPart)));
+                    results.add(new CompareResult(sentenceName, contextPart, computeDistance(Arrays.asList(null, sentenceName.get(0)), contextPart)));
                 } else {
-                    results.add(new CompareResult(sentenceName, contextPart));
+                    results.add(new CompareResult(sentenceName, contextPart, computeDistance(sentenceName.words, contextPart)));
                 }
             }
         }
         return results;
     }
 
-    private Map<List<String>, CompareResult> matchResults(List<CompareResult> compareResults) {
-        Map<List<String>, CompareResult> result = new HashMap<>();
-        for (List<String> sentenceName : sentenceNames) {
-            for (CompareResult compareResult : compareResults) {
-                if (!compareResult.sentenceName.containsAll(sentenceName)) {
+    private Map<SentenceName, CompareResult> filter(List<CompareResult> compareResults) {
+        // First step: find the best result for each SentenceName from sentenceNames
+        Map<SentenceName, CompareResult> result = new HashMap<>();
+        for (SentenceName sentenceName : sentenceNames) {
+            for (CompareResult compareResult1 : compareResults) {
+                if (!compareResult1.sentenceName.equals(sentenceName)) {
                     continue;
                 }
-                CompareResult q = result.get(sentenceName);
-                if (q == null) {
-                    result.put(sentenceName, compareResult);
+                CompareResult compareResult2 = result.get(sentenceName);
+                if (compareResult2 == null) {
+                    result.put(sentenceName, compareResult1);
                     continue;
                 }
-                if (q.getFirstResult() + q.getSecondResult() < compareResult.getFirstResult() + compareResult.getSecondResult()) {
-                    result.put(sentenceName, compareResult);
+                if (compareResult2.getDistance() < compareResult1.getDistance()) {
+                    result.put(sentenceName, compareResult1);
                 }
             }
         }
-        return result;
-    }
 
-    private Map<List<String>, CompareResult> correctByNeighbors(Map<List<String>, CompareResult> matches) {
-        // TODO implementation!
-        Map<List<String>, CompareResult> result = new HashMap<>();
-        for (List<String> sentenceName : sentenceNames) {
-            CompareResult q = matches.get(sentenceName);
-            if (sentenceName.size() == 2) {
-                result.put(sentenceName, q);
+        // Second step: check dual SentenceName to exclude worse neighbours
+        for (SentenceName sentenceName1 : sentenceNames) {
+            if (sentenceName1.size() != 2) {
                 continue;
             }
-            boolean contains = false;
-            for (List<String> sentenceName2 : sentenceNames) {
+            if (result.get(sentenceName1) == null) {
+                continue;
+            }
+            for (SentenceName sentenceName2 : sentenceNames) {
                 if (sentenceName2.size() != 2) {
                     continue;
                 }
-                if (!sentenceName2.containsAll(sentenceName)) {
+                if (result.get(sentenceName2) == null) {
                     continue;
                 }
-                CompareResult q2 = matches.get(sentenceName2);
-                if (!q.contextName.equals(q2.contextName)) {
+                if (sentenceName1.position + 1 != sentenceName2.position) {
                     continue;
                 }
-                result.put(sentenceName2, q);
-                contains = true;
+
+                result.remove(result.get(sentenceName1).getDistance() > result.get(sentenceName2).getDistance() ? sentenceName2 : sentenceName1);
                 break;
             }
-            if (!contains) {
-                result.put(sentenceName, q);
+        }
+
+        // Third step: remove single SentenceName's if it already contains in duals with checking it's neighborliness
+        for (SentenceName sentenceName1 : sentenceNames) {
+            if (sentenceName1.size() != 1) {
+                continue;
+            }
+            for (SentenceName sentenceName2 : sentenceNames) {
+                if (sentenceName2.size() != 2) {
+                    continue;
+                }
+                if (result.get(sentenceName2) == null) {
+                    continue;
+                }
+                if (sentenceName1.position != sentenceName2.position && sentenceName1.position != sentenceName2.position + 1) {
+                    continue;
+                }
+
+                result.remove(sentenceName1);
+                break;
             }
         }
         return result;
     }
 
-    private List<Pair<String, String>> makeCorrectionPairs(Map<List<String>, CompareResult> matches) {
+    private List<Pair<String, String>> makeCorrectionPairs(Map<SentenceName, CompareResult> matches) {
         List<Pair<String, String>> result = new ArrayList<>();
-        for (List<String> sentenceName : sentenceNames) {
-            CompareResult q = matches.get(sentenceName);
-            if (q == null) {
+        for (SentenceName sentenceName : sentenceNames) {
+            CompareResult compareResult = matches.get(sentenceName);
+            if (compareResult == null) {
                 continue;
             }
-            if (sentenceName.size() == 1) {
-                result.add(Pair.of(sentenceName.get(0), q.contextName.get(q.contextName.size() == 1 || q.result.get(0) > 0. ? 0 : 1)));
+            result.add(Pair.of(StringUtils.join(sentenceName.words, " "), StringUtils.join(compareResult.contextName, " ")));
+        }
+        return result;
+    }
+
+    private List<Double> computeDistance(List<String> first, List<String> second) {
+        JaroWinklerDistance distance = new JaroWinklerDistance();
+        List<Double> result = new ArrayList<>();
+        for (int i = 0; i < first.size(); i++) {
+            if (first.get(i) == null) {
+                result.add(i, 0.);
             } else {
-                result.add(Pair.of(StringUtils.join(sentenceName, " "), StringUtils.join(q.contextName, " ")));
+                result.add(i, distance.apply(first.get(i), second.get(i)));
             }
         }
         return result;
+    }
+
+    private static class SentenceName {
+
+        List<String> words;
+
+        int position;
+
+        SentenceName(List<String> words, int position) {
+            this.words = words;
+            this.position = position;
+        }
+
+        int size() {
+            return words.size();
+        }
+
+        String get(int index) {
+            return words.get(index);
+        }
+
+
+        @Override
+        public int hashCode() {
+            int result = words.hashCode();
+            result = 31 * result + position;
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            SentenceName that = (SentenceName) o;
+
+            if (position != that.position) return false;
+            return words.equals(that.words);
+        }
+
+        @Override
+        public String toString() {
+            return "\nSentenceName{" +
+                    "words=" + words +
+                    ", position=" + position +
+                    '}';
+        }
     }
 
     private static class CompareResult {
 
-        List<String> sentenceName;
+        SentenceName sentenceName;
 
         List<String> contextName;
 
-        List<Double> result;
+        List<Double> distances;
 
-        CompareResult(List<String> sentenceName, List<String> contextName) {
+        CompareResult(SentenceName sentenceName, List<String> contextName, List<Double> distances) {
             this.sentenceName = sentenceName;
             this.contextName = contextName;
-
-            JaroWinklerDistance distance = new JaroWinklerDistance();
-            result = new ArrayList<>();
-            for (int i = 0; i < contextName.size(); i++) {
-                if (sentenceName.get(i) == null) {
-                    result.add(i, 0.);
-                } else {
-                    result.add(i, distance.apply(sentenceName.get(i), contextName.get(i)));
-                }
-            }
+            this.distances = distances;
         }
 
-        Double getFirstResult() {
-            return result.get(0);
-        }
-
-        Double getSecondResult() {
-            return result.size() == 1 ? 0. : result.get(1);
+        double getDistance() {
+            return distances.get(0) + (distances.size() == 1 ? 0. : distances.get(1));
         }
 
         @Override
@@ -154,7 +211,7 @@ class Neighbourhood {
             return "CompareResult{" +
                     "contextName=" + contextName +
                     ", sentenceName=" + sentenceName +
-                    ", result=" + result +
+                    ", result=" + distances +
                     "}";
         }
     }

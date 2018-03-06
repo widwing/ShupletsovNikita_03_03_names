@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.List;
 
 // TODO comments
-// TODO replace q, w, etc to adequate names
 class NamesCorrector {
 
     private static final String I = "I";
@@ -43,10 +42,14 @@ class NamesCorrector {
                 buffer.add(part);
                 continue;
             }
-            sentenceNames.add(new Neighbourhood(buffer));
-            buffer = new ArrayList<>();
+            if (buffer.size() > 0) {
+                sentenceNames.add(new Neighbourhood(buffer));
+                buffer = new ArrayList<>();
+            }
         }
-        sentenceNames.add(new Neighbourhood(buffer));
+        if (buffer.size() > 0) {
+            sentenceNames.add(new Neighbourhood(buffer));
+        }
         return sentenceNames;
     }
 }
